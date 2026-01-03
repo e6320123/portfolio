@@ -12,9 +12,12 @@ body {
     padding: 20px;
 }
 
-header h1 {
+h1 {
     font-size: 2rem;
     margin-bottom: 20px;
+}
+.made{
+    margin-top: 220px;
 }
 
 .projects {
@@ -90,7 +93,23 @@ header h1 {
 } 
 .bg1:hover h4,.bg1:hover p,
 .bg2:hover h4,.bg2:hover p,
-.bg3:hover a:first-child{
+.bg3:hover a:first-child,
+.bg4:hover h4,.bg4:hover p{
     opacity: 0;
 }
+
+.bg4{
+    background-image: url("cst.png");
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-color: rgba(255, 255, 255, 1); 
+    background-blend-mode: overlay;  
+    transition: background .5s ease-in-out;
+}
+.bg4:hover{
+    background-image: url("cst.png");
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-color: rgba(255, 255, 255, 0); 
+} 
 
