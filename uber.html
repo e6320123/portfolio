@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛵</text></svg>">
+<title>外送收入紀錄 (localStorage版)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #FAF9F5; --card: #FFFFFF; --sidebar: #F0EFE9; --border: #E0DED7;
+    --accent: #2e7d32; --accent-light: #f1f8e9; --text: #1a1a18;
+    --text-muted: #6b6860; --hover: #ECEAE4; --danger: #c0392b;
+    --week-target: 1800;
+  }
+  body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--text); padding: 32px 24px; }
+  .page-layout { display: grid; grid-template-columns: 320px 1fr; gap: 24px; max-width: 1200px; margin: 0 auto; }
+  .add-panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; position: sticky; top: 24px; }
+  .form-group { margin-bottom: 14px; }
+  label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-muted); }
+  input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; background: var(--bg); outline: none; }
+  .btn { width: 100%; padding: 10px; background: var(--accent); color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .section-title { font-size: 18px; font-weight: 700; padding-bottom: 12px; border-bottom: 2px solid var(--border); margin-bottom: 20px; color: var(--text); }
+  
+  /* 週目標面板 */
+  .week-panel {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .week-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .week-card.target {
+    background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%);
+    border-color: #1b5e20;
+    color: white;
+  }
+  .week-card.current {
+    background: var(--card);
+    border: 2px solid var(--accent);
+  }
+  .week-card.last {
+    background: var(--sidebar);
+    border-color: var(--border);
+  }
+  .week-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    opacity: 0.75;
+  }
+  .week-card.target .week-label { color: rgba(255,255,255,0.85); }
+  .week-card.current .week-label { color: var(--accent); opacity: 1; }
+  .week-card.last .week-label { color: var(--text-muted); }
+  .week-value {
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 10px;
+  }
+  .week-card.target .week-value { color: #fff; }
+  .week-card.current .week-value { color: var(--accent); }
+  .week-card.last .week-value { color: var(--text); }
+
+  /* 進度條 */
+  .progress-wrap {
+    margin-top: 8px;
+  }
+  .progress-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    margin-bottom: 5px;
+  }
+  .week-card.target .progress-meta { color: rgba(255,255,255,0.7); }
+  .week-card.current .progress-meta { color: var(--text-muted); }
+  .progress-bar-bg {
+    height: 6px;
+    border-radius: 99px;
+    background: rgba(0,0,0,0.1);
+    overflow: hidden;
+  }
+  .week-card.target .progress-bar-bg { background: rgba(255,255,255,0.2); }
+  .week-card.current .progress-bar-bg { background: #e8f5e9; }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    background: #fff;
+    transition: width 0.6s ease;
+  }
+  .week-card.current .progress-bar-fill { background: var(--accent); }
+
+  /* 達標標籤 */
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 99px;
+    margin-top: 6px;
+  }
+  .badge.done { background: #fff; color: var(--accent); }
+  .badge.fail { background: rgba(192,57,43,0.15); color: var(--danger); }
+  .badge.ongoing { background: rgba(46,125,50,0.12); color: var(--accent); }
+
+  /* 月份統計 */
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+  .stat-val { font-size: 20px; font-weight: 700; color: var(--accent); margin: 4px 0; }
+
+  /* 紀錄表格 */
+  .records-panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 12px 16px; background: var(--sidebar); color: var(--text-muted); font-weight: 700; }
+  td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .income-cell { font-weight: 600; color: var(--accent); }
+  .del-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; }
+</style>
+</head>
+<body>
+
+<div class="page-layout">
+  <div class="add-panel">
+    <h2 style="font-size:15px; margin-bottom:15px;">📥 新增營收</h2>
+    <div class="form-group"><label>日期</label><input type="date" id="date"></div>
+    <div class="form-group"><label>開始時間</label><input type="time" id="start"></div>
+    <div class="form-group"><label>結束時間</label><input type="time" id="end"></div>
+    <div class="form-group"><label>本日總收入</label><input type="number" id="income" placeholder="0"></div>
+    <div class="form-group"><label>總單數</label><input type="number" id="orders" placeholder="0"></div>
+    <button class="btn" onclick="addUberRecord()">新增紀錄</button>
+  </div>
+
+  <div class="main-content">
+    <div class="section-title">🛵 Uber 外送營收數據系統</div>
+
+    <!-- 週追蹤面板 -->
+    <div class="week-panel">
+      <!-- 週目標 -->
+      <div class="week-card target">
+        <div class="week-label">📌 每週計畫目標</div>
+        <div class="week-value" id="week-target-display">$4,500</div>
+        <div class="progress-wrap">
+          <div class="progress-meta">
+            <span>固定目標</span>
+            <span>週一～週日</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" style="width:100%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 本週收入 -->
+      <div class="week-card current">
+        <div class="week-label">📈 本週目前收入</div>
+        <div class="week-value" id="this-week-income">$0</div>
+        <div class="progress-wrap">
+          <div class="progress-meta">
+            <span id="this-week-range">—</span>
+            <span id="this-week-pct">0%</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="this-week-bar" style="width:0%"></div>
+          </div>
+        </div>
+        <span class="badge ongoing" id="this-week-badge">進行中</span>
+      </div>
+
+      <!-- 上週收入 -->
+      <div class="week-card last">
+        <div class="week-label">🗓 上週總收入</div>
+        <div class="week-value" id="last-week-income">$0</div>
+        <div class="progress-wrap">
+          <div class="progress-meta">
+            <span id="last-week-range">—</span>
+            <span id="last-week-pct">—</span>
+          </div>
+          <div class="progress-bar-bg" style="background:#ddd;">
+            <div class="progress-bar-fill" id="last-week-bar" style="width:0%; background:#888;"></div>
+          </div>
+        </div>
+        <span class="badge" id="last-week-badge"></span>
+      </div>
+    </div>
+
+    <!-- 月份統計 -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">本月總收入</div>
+        <div class="stat-val" id="month-income">$0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">本月總工時</div>
+        <div class="stat-val" id="month-hours">0h</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">平均時薪</div>
+        <div class="stat-val" id="avg-hourly">$0</div>
+      </div>
+    </div>
+
+    <div class="records-panel">
+      <div style="padding:12px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="font-size:14px;">營收歷史回顧</h2>
+        <input type="month" id="filter-month" style="width:auto; padding:4px 8px;" onchange="renderTable()">
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>工時區段</th>
+            <th>收入</th>
+            <th>單數</th>
+            <th>時薪</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="records-body"></tbody>
+      </table>
+      <div id="empty-msg" style="padding:40px; text-align:center; color:var(--text-muted); display:none;">目前尚無紀錄</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const WEEK_TARGET = 4500;
+  let uberRecords = [];
+
+  // 面試用的初始假資料
+  const initialUberData = [
+    { id: 1, date: "2026-03-24", start: "10:00", end: "14:00", income: 800, orders: 12 },
+    { id: 2, date: "2026-03-25", start: "11:00", end: "15:00", income: 950, orders: 15 },
+    { id: 3, date: new Date().toISOString().split('T')[0], start: "17:00", end: "21:00", income: 1200, orders: 18 }
+  ];
+
+  function saveToLocal() {
+    localStorage.setItem('uberRecords', JSON.stringify(uberRecords));
+  }
+
+  function loadFromLocal() {
+    const saved = localStorage.getItem('uberRecords');
+    if (saved) {
+      uberRecords = JSON.parse(saved);
+    } else {
+      uberRecords = initialUberData;
+      saveToLocal();
+    }
+  }
+
+  function reloadData() {
+    loadFromLocal();
+    renderAll();
+  }
+
+  function addUberRecord() {
+    const date = document.getElementById('date').value;
+    const start = document.getElementById('start').value;
+    const end = document.getElementById('end').value;
+    const income = document.getElementById('income').value;
+    const orders = document.getElementById('orders').value;
+
+    if (!date || !income) return alert("日期與收入為必填項目！");
+
+    const newRecord = {
+      id: Date.now(),
+      date, start, end,
+      income: parseFloat(income),
+      orders: parseInt(orders) || 0
+    };
+    
+    uberRecords.push(newRecord);
+    saveToLocal();
+
+    ['start', 'end', 'income', 'orders'].forEach(id => document.getElementById(id).value = '');
+    reloadData();
+  }
+
+  function deleteRecord(id) {
+    if (!confirm("確定要抹除這筆營收紀錄嗎？")) return;
+    uberRecords = uberRecords.filter(r => r.id !== id);
+    saveToLocal();
+    reloadData();
+  }
+
+  // 取得某日期所在週的週一與週日（YYYY-MM-DD）
+  function getWeekRange(dateStr) {
+    const d = new Date(dateStr);
+    const day = d.getDay(); // 0=日, 1=月...
+    const diffToMonday = (day === 0) ? -6 : 1 - day;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + diffToMonday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const fmt = d => d.toISOString().split('T')[0];
+    return { start: fmt(monday), end: fmt(sunday) };
+  }
+
+  // 計算某週範圍內的總收入
+  function sumInWeekRange(start, end) {
+    return uberRecords
+      .filter(r => r.date >= start && r.date <= end)
+      .reduce((s, r) => s + r.income, 0);
+  }
+
+  function renderAll() {
+    renderWeekStats();
+    renderStats();
+    renderTable();
+  }
+
+  function renderWeekStats() {
+    const today = new Date().toISOString().split('T')[0];
+    const thisWeek = getWeekRange(today);
+
+    // 上週：本週週一往前7天
+    const lastMondayDate = new Date(thisWeek.start);
+    lastMondayDate.setDate(lastMondayDate.getDate() - 7);
+    const lastWeek = getWeekRange(lastMondayDate.toISOString().split('T')[0]);
+
+    const thisWeekIncome = sumInWeekRange(thisWeek.start, thisWeek.end);
+    const lastWeekIncome = sumInWeekRange(lastWeek.start, lastWeek.end);
+
+    // 更新畫面上的目標金額，確保與 WEEK_TARGET 變數相同
+    document.getElementById('week-target-display').textContent = `$${WEEK_TARGET.toLocaleString()}`;
+
+    // 本週
+    const thisPct = Math.min(Math.round((thisWeekIncome / WEEK_TARGET) * 100), 100);
+    document.getElementById('this-week-income').textContent = `$${thisWeekIncome.toLocaleString()}`;
+    document.getElementById('this-week-range').textContent = `${thisWeek.start.slice(5)} ～ ${thisWeek.end.slice(5)}`;
+    document.getElementById('this-week-pct').textContent = `${thisPct}%`;
+    document.getElementById('this-week-bar').style.width = `${thisPct}%`;
+
+    const thisBadge = document.getElementById('this-week-badge');
+    if (thisWeekIncome >= WEEK_TARGET) {
+      thisBadge.textContent = '✓ 已達標';
+      thisBadge.className = 'badge done';
+    } else {
+      const remaining = WEEK_TARGET - thisWeekIncome;
+      thisBadge.textContent = `還差 $${remaining.toLocaleString()}`;
+      thisBadge.className = 'badge ongoing';
+    }
+
+    // 上週
+    const lastPct = Math.min(Math.round((lastWeekIncome / WEEK_TARGET) * 100), 100);
+    document.getElementById('last-week-income').textContent = `$${lastWeekIncome.toLocaleString()}`;
+    document.getElementById('last-week-range').textContent = `${lastWeek.start.slice(5)} ～ ${lastWeek.end.slice(5)}`;
+    document.getElementById('last-week-pct').textContent = `${lastPct}%`;
+    document.getElementById('last-week-bar').style.width = `${lastPct}%`;
+
+    const lastBadge = document.getElementById('last-week-badge');
+    if (lastWeekIncome === 0) {
+      lastBadge.textContent = '';
+      lastBadge.className = 'badge';
+    } else if (lastWeekIncome >= WEEK_TARGET) {
+      lastBadge.textContent = '✓ 達標';
+      lastBadge.className = 'badge done';
+      lastBadge.style.background = '#c8e6c9';
+      lastBadge.style.color = '#2e7d32';
+    } else {
+      lastBadge.textContent = '✗ 未達標';
+      lastBadge.className = 'badge fail';
+    }
+  }
+
+  function renderStats() {
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const monthRecs = uberRecords.filter(r => r.date.startsWith(currentMonth));
+
+    const totalIncome = monthRecs.reduce((s, r) => s + r.income, 0);
+    let totalMinutes = 0;
+    monthRecs.forEach(r => {
+      if (r.start && r.end) {
+        const [h1, m1] = r.start.split(':').map(Number);
+        const [h2, m2] = r.end.split(':').map(Number);
+        totalMinutes += (h2 * 60 + m2) - (h1 * 60 + m1);
+      }
+    });
+
+    const totalHours = totalMinutes / 60;
+    document.getElementById('month-income').textContent = `$${totalIncome.toLocaleString()}`;
+    document.getElementById('month-hours').textContent = `${totalHours.toFixed(1)}h`;
+    document.getElementById('avg-hourly').textContent = totalHours > 0 ? `$${Math.round(totalIncome / totalHours)}` : '$0';
+  }
+
+  function renderTable() {
+    const filterMonth = document.getElementById('filter-month').value;
+    let filtered = uberRecords;
+    if (filterMonth) filtered = uberRecords.filter(r => r.date.startsWith(filterMonth));
+
+    const tbody = document.getElementById('records-body');
+    const emptyMsg = document.getElementById('empty-msg');
+
+    if (filtered.length === 0) {
+      tbody.innerHTML = '';
+      emptyMsg.style.display = 'block';
+      return;
+    }
+
+    emptyMsg.style.display = 'none';
+    tbody.innerHTML = filtered.map(r => {
+      let durationStr = '-';
+      let hourlyStr = '-';
+      if (r.start && r.end) {
+        const [h1, m1] = r.start.split(':').map(Number);
+        const [h2, m2] = r.end.split(':').map(Number);
+        const diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+        durationStr = `${r.start}~${r.end} (${(diff/60).toFixed(1)}h)`;
+        if (diff > 0) hourlyStr = `$${Math.round(r.income / (diff/60))}`;
+      }
+
+      return `
+        <tr>
+          <td>${r.date}</td>
+          <td>${durationStr}</td>
+          <td class="income-cell">$${r.income.toLocaleString()}</td>
+          <td>${r.orders} 單</td>
+          <td>${hourlyStr}</td>
+          <td><button class="del-btn" onclick="deleteRecord(${r.id})">✕</button></td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('date').value = today;
+  document.getElementById('filter-month').value = today.slice(0, 7);
+  reloadData();
+</script>
+
+</body>
+</html>

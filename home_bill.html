@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+<title>帳單紀錄 (localStorage版)</title>
+<style>
+  /* [樣式區：維持 Boss 喜愛的優雅設計，無變動] */
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #FAF9F5; --card: #FFFFFF; --sidebar: #F0EFE9; --border: #E0DED7;
+    --accent: #b5640a; --accent-light: #fef3e8; --text: #1a1a18;
+    --text-muted: #6b6860; --hover: #ECEAE4; --danger: #c0392b;
+  }
+  body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 32px 24px; }
+  .page-layout { display: grid; grid-template-columns: 1fr 2fr 2fr; gap: 24px; max-width: 1400px; align-items: start; }
+  .add-panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; position: sticky; top: 24px; }
+  .toggle-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 20px; }
+  .toggle-btn { padding: 8px; border: 2px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text-muted); font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.15s; text-align: center; }
+  .toggle-btn.active { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+  .form-section { display: none; }
+  .form-section.active { display: block; }
+  .form-group { margin-bottom: 14px; }
+  label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text-muted); }
+  select, input { width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; background: var(--bg); outline: none; }
+  .btn { width: 100%; padding: 10px; background: var(--accent); color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .section-col { display: flex; flex-direction: column; gap: 20px; }
+  .section-title { font-size: 18px; font-weight: 700; padding-bottom: 12px; border-bottom: 2px solid var(--border); margin-bottom: 4px; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  h2 { font-size: 13px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px; }
+  .add-category { display: flex; gap: 8px; margin-bottom: 10px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .stat-card .avg { font-size: 18px; font-weight: 700; color: var(--accent); }
+  .records-panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .records-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 9px 14px; background: var(--sidebar); color: var(--text-muted); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); }
+  .del-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 15px; }
+  .amount-cell { font-weight: 600; color: var(--accent); }
+  .tag { display: inline-block; background: var(--accent-light); color: var(--accent); font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+  /* 自訂項目輸入框與按鈕組合 */
+  .add-category {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .add-category input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .add-category input:focus {
+    border-color: var(--accent);
+  }
+
+  .add-category button {
+    padding: 8px 16px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+  }
+
+  .add-category button:hover {
+    opacity: 0.85;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-layout">
+  <div class="add-panel">
+    <div class="toggle-row">
+      <button class="toggle-btn active" id="btn-family" onclick="switchMode('family')">🏠 家庭</button>
+      <button class="toggle-btn" id="btn-personal" onclick="switchMode('personal')">👤 個人</button>
+    </div>
+
+    <div class="form-section active" id="form-family">
+      <h2>新增家庭紀錄</h2>
+      <div class="form-group"><label>項目</label><select id="category"></select></div>
+      <div class="form-group"><label>日期</label><input type="date" id="date"></div>
+      <div class="form-group"><label>金額（元）</label><input type="number" id="amount" placeholder="0"></div>
+      <button class="btn" onclick="addRecord('family')">新增</button>
+    </div>
+
+    <div class="form-section" id="form-personal">
+      <h2>新增個人紀錄</h2>
+      <div class="form-group"><label>項目</label><select id="p-category"></select></div>
+      <div class="form-group"><label>日期</label><input type="date" id="p-date"></div>
+      <div class="form-group"><label>金額（元）</label><input type="number" id="p-amount" placeholder="0"></div>
+      <button class="btn" onclick="addRecord('personal')">新增</button>
+    </div>
+
+    <div id="combined-total" style="background:var(--accent-light);border:2px solid var(--accent);border-radius:8px;padding:14px 16px;margin-top:20px;">
+      <div style="font-size:12px;color:var(--text-muted);">💰 每月總支出合計</div>
+      <div id="combined-total-amt" style="font-size:22px;font-weight:700;color:var(--accent);">$0</div>
+    </div>
+  </div>
+
+  <div class="section-col">
+    <div class="section-title">🏠 家庭帳單</div>
+    <div class="panel"><h2>月平均花費</h2><div class="stats-grid" id="stats-grid"></div></div>
+    <div class="panel">
+      <h2>自訂項目</h2>
+      <div class="add-category"><input type="text" id="new-cat" placeholder="例：維修"><button onclick="addNewCategory('family')">加入</button></div>
+      <div id="custom-cats" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+    </div>
+    <div class="records-panel">
+      <div class="records-header"><h2>所有紀錄</h2><div class="filter-row"><select id="filter-year" onchange="renderTable('family')"><option value="">全部年份</option></select></div></div>
+      <table><thead><tr><th>項目</th><th>日期</th><th>金額</th><th></th></tr></thead><tbody id="records-body"></tbody></table>
+    </div>
+  </div>
+
+  <div class="section-col">
+    <div class="section-title">👤 個人記帳</div>
+    <div class="panel"><h2>月平均花費</h2><div class="stats-grid" id="p-stats-grid"></div></div>
+    <div class="panel">
+      <h2>自訂項目</h2>
+      <div class="add-category"><input type="text" id="p-new-cat" placeholder="例：早餐"><button onclick="addNewCategory('personal')">加入</button></div>
+      <div id="p-custom-cats" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+    </div>
+    <div class="records-panel">
+      <div class="records-header"><h2>所有紀錄</h2><div class="filter-row"><select id="p-filter-year" onchange="renderTable('personal')"><option value="">全部年份</option></select></div></div>
+      <table><thead><tr><th>項目</th><th>日期</th><th>金額</th><th></th></tr></thead><tbody id="p-records-body"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // [數據狀態]
+  const defaultCats = {
+    family: [{id: 1, name: "房屋租金", is_default: 1}, {id: 2, name: "水電瓦斯", is_default: 1}, {id: 3, name: "家用採購", is_default: 1}],
+    personal: [{id: 4, name: "日常餐飲", is_default: 1}, {id: 5, name: "交通油錢", is_default: 1}, {id: 6, name: "娛樂交際", is_default: 1}]
+  };
+  
+  const initialRecords = {
+    family: [{id: 1, category: "房屋租金", date: "2026-03-01", amount: 12000}, {id: 2, category: "水電瓦斯", date: "2026-03-10", amount: 1800}],
+    personal: [{id: 3, category: "日常餐飲", date: "2026-03-25", amount: 200}, {id: 4, category: "交通油錢", date: "2026-03-26", amount: 800}]
+  };
+
+  let state = {
+    family: { cats: [], records: [] },
+    personal: { cats: [], records: [] }
+  };
+
+  function saveToLocal() {
+    localStorage.setItem('billState', JSON.stringify(state));
+  }
+
+  function loadFromLocal() {
+    const saved = localStorage.getItem('billState');
+    if (saved) {
+      state = JSON.parse(saved);
+    } else {
+      state = {
+        family: { cats: defaultCats.family, records: initialRecords.family },
+        personal: { cats: defaultCats.personal, records: initialRecords.personal }
+      };
+      saveToLocal();
+    }
+  }
+
+  // [切換模式]
+  function switchMode(mode) {
+    document.getElementById('form-family').classList.toggle('active', mode === 'family');
+    document.getElementById('form-personal').classList.toggle('active', mode === 'personal');
+    document.getElementById('btn-family').classList.toggle('active', mode === 'family');
+    document.getElementById('btn-personal').classList.toggle('active', mode === 'personal');
+  }
+
+  // [核心：載入數據]
+  function reloadAll() {
+    loadFromLocal();
+    renderAll();
+  }
+
+  // [核心：新增紀錄]
+  function addRecord(type) {
+    const prefix = type === 'family' ? '' : 'p-';
+    const cat = document.getElementById(`${prefix}category`).value;
+    const date = document.getElementById(`${prefix}date`).value;
+    const amount = document.getElementById(`${prefix}amount`).value;
+
+    if (!cat || !date || !amount) return alert("請填寫完整資訊");
+
+    state[type].records.push({
+      id: Date.now(),
+      category: cat,
+      date,
+      amount: parseFloat(amount)
+    });
+    saveToLocal();
+
+    document.getElementById(`${prefix}amount`).value = '';
+    reloadAll();
+  }
+
+  // [核心：刪除紀錄]
+  function deleteRecord(id) {
+    if (!confirm("確定刪除此筆紀錄？")) return;
+    state.family.records = state.family.records.filter(r => r.id !== id);
+    state.personal.records = state.personal.records.filter(r => r.id !== id);
+    saveToLocal();
+    reloadAll();
+  }
+
+  // [自訂項目管理]
+  function addNewCategory(type) {
+    const inputId = type === 'family' ? 'new-cat' : 'p-new-cat';
+    const name = document.getElementById(inputId).value.trim();
+    if (!name) return;
+    
+    state[type].cats.push({
+      id: Date.now(),
+      name,
+      is_default: 0
+    });
+    saveToLocal();
+
+    document.getElementById(inputId).value = '';
+    reloadAll();
+  }
+
+  function removeCategory(id) {
+    state.family.cats = state.family.cats.filter(c => c.id !== id);
+    state.personal.cats = state.personal.cats.filter(c => c.id !== id);
+    saveToLocal();
+    reloadAll();
+  }
+
+  // [視覺化渲染邏輯]
+  function renderAll() {
+    ['family', 'personal'].forEach(type => {
+      renderDropdowns(type);
+      renderCustomTags(type);
+      renderStats(type);
+      renderYearFilter(type);
+      renderTable(type);
+    });
+    renderCombinedTotal();
+  }
+
+  function renderDropdowns(type) {
+    const prefix = type === 'family' ? '' : 'p-';
+    const cats = state[type].cats;
+    document.getElementById(`${prefix}category`).innerHTML = cats.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+  }
+
+  function renderCustomTags(type) {
+    const prefix = type === 'family' ? '' : 'p-';
+    const container = document.getElementById(`${prefix}custom-cats`);
+    const customs = state[type].cats.filter(c => !c.is_default);
+    container.innerHTML = customs.map(c => `
+      <span class="tag">${c.name} <span style="cursor:pointer;margin-left:4px;" onclick="removeCategory(${c.id})">✕</span></span>
+    `).join('');
+  }
+
+  function renderStats(type) {
+    const prefix = type === 'family' ? '' : 'p-';
+    const grid = document.getElementById(`${prefix}stats-grid`);
+    const recs = state[type].records;
+    if (recs.length === 0) { grid.innerHTML = "尚無數據"; return; }
+
+    const catMap = {};
+    recs.forEach(r => {
+      if (!catMap[r.category]) catMap[r.category] = { sum: 0, dates: [] };
+      catMap[r.category].sum += r.amount;
+      catMap[r.category].dates.push(new Date(r.date));
+    });
+
+    let totalAvg = 0;
+    const html = Object.keys(catMap).map(cat => {
+      const data = catMap[cat];
+      const months = getMonthDiff(data.dates);
+      const avg = Math.round(data.sum / months);
+      totalAvg += avg;
+      return `<div class="stat-card"><div style="font-size:11px;color:var(--text-muted)">${cat}</div><div class="avg">$${avg.toLocaleString()}</div><div style="font-size:11px;color:var(--text-muted)">月平均</div></div>`;
+    }).join('');
+
+    const totalCard = `<div class="stat-card" style="border-color:var(--accent);background:var(--accent-light);"><div style="font-size:11px;color:var(--text-muted)">📊 總支出</div><div class="avg" id="${type}-total-val">$${totalAvg.toLocaleString()}</div><div style="font-size:11px;color:var(--text-muted)">月平均合計</div></div>`;
+    grid.innerHTML = totalCard + html;
+  }
+
+  function renderTable(type) {
+    const prefix = type === 'family' ? '' : 'p-';
+    const year = document.getElementById(`${prefix}filter-year`).value;
+    const tbody = document.getElementById(`${prefix}records-body`);
+    
+    let filtered = state[type].records;
+    if (year) filtered = filtered.filter(r => r.date.startsWith(year));
+
+    tbody.innerHTML = filtered.map(r => `
+      <tr>
+        <td><span class="tag">${r.category}</span></td>
+        <td>${r.date}</td>
+        <td class="amount-cell">$${r.amount.toLocaleString()}</td>
+        <td><button class="del-btn" onclick="deleteRecord(${r.id})">✕</button></td>
+      </tr>
+    `).join('');
+  }
+
+  function renderYearFilter(type) {
+    const prefix = type === 'family' ? '' : 'p-';
+    const sel = document.getElementById(`${prefix}filter-year`);
+    const years = [...new Set(state[type].records.map(r => r.date.slice(0, 4)))].sort().reverse();
+    const current = sel.value;
+    sel.innerHTML = '<option value="">全部年份</option>' + years.map(y => `<option value="${y}" ${y === current ? 'selected':''}>${y}</option>`).join('');
+  }
+
+  function renderCombinedTotal() {
+    const fTotal = parseInt(document.getElementById('family-total-val')?.textContent.replace(/[^0-9]/g,'') || 0);
+    const pTotal = parseInt(document.getElementById('personal-total-val')?.textContent.replace(/[^0-9]/g,'') || 0);
+    document.getElementById('combined-total-amt').textContent = '$' + (fTotal + pTotal).toLocaleString();
+  }
+
+  function getMonthDiff(dates) {
+    if (dates.length === 0) return 1;
+    const sorted = dates.sort((a,b) => a-b);
+    const first = sorted[0], last = sorted[sorted.length-1];
+    return Math.max(1, (last.getFullYear() - first.getFullYear()) * 12 + (last.getMonth() - first.getMonth()) + 1);
+  }
+
+  // 初始化
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('date').value = today;
+  document.getElementById('p-date').value = today;
+  reloadAll();
+</script>
+</body>
+</html>
